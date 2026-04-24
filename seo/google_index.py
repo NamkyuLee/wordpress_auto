@@ -6,12 +6,16 @@ import config
 logger = logging.getLogger(__name__)
 
 
-async def submit_to_google(url: str) -> bool:
+async def submit_to_google(url: str) -> bool | None:
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _submit_sync, url)
 
 
-def _submit_sync(url: str) -> bool:
+def _submit_sync(url: str) -> bool | None:
+    if not config.GOOGLE_INDEXING_ENABLED:
+        logger.info("Google Indexing API 비활성화: 일반 블로그 글은 사이트맵 기반 크롤링을 사용합니다.")
+        return None
+
     try:
         from google.oauth2 import service_account
         from googleapiclient.discovery import build

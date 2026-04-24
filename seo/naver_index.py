@@ -1,14 +1,13 @@
 import asyncio
 import logging
+
 import requests
 
 import config
 
 logger = logging.getLogger(__name__)
 
-# 네이버 서치어드바이저는 공개 URL 제출 API가 없으므로
-# 사이트맵 핑 방식으로 크롤링 요청
-_NAVER_PING_ENDPOINT = "https://searchadvisor.naver.com/ping"
+_INDEXNOW_ENDPOINT = "https://searchadvisor.naver.com/indexnow"
 
 
 async def submit_to_naver(url: str) -> bool:
@@ -17,16 +16,30 @@ async def submit_to_naver(url: str) -> bool:
 
 
 def _submit_sync(url: str) -> bool:
-    sitemap_url = f"{config.WP_URL}/sitemap_index.xml"
+    if not config.NAVER_INDEXNOW_KEY:
+        logger.warning("NAVER_INDEXNOW_KEY 미설정 — 네이버 등록 건너뜀")
+        return False
+
+    payload = {
+        "host": config.WP_URL.replace("https://", "").replace("http://", "").rstrip("/"),
+        "key": config.NAVER_INDEXNOW_KEY,
+        "urlList": [url],
+    }
+    if config.NAVER_INDEXNOW_KEY_LOCATION:
+        payload["keyLocation"] = config.NAVER_INDEXNOW_KEY_LOCATION
+
     try:
-        resp = requests.get(
-            _NAVER_PING_ENDPOINT,
-            params={"sitemap": sitemap_url},
+        resp = requests.post(
+            _INDEXNOW_ENDPOINT,
+            json=payload,
+            headers={"Content-Type": "application/json; charset=utf-8"},
             timeout=15,
         )
-        resp.raise_for_status()
-        logger.info("Naver 사이트맵 핑 성공: %s", sitemap_url)
-        return True
+        if resp.status_code in (200, 202):
+            logger.info("Naver IndexNow 등록 성공: %s", url)
+            return True
+        logger.error("Naver IndexNow 등록 실패: HTTP %s %s", resp.status_code, resp.text[:200])
+        return False
     except Exception as e:
-        logger.error("Naver 사이트맵 핑 실패: %s", e)
+        logger.error("Naver IndexNow 요청 오류: %s", e)
         return False
